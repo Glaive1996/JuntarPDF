@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Juntar PDFs</title>
+
+<script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+
+<style>
+body{
+    font-family: Arial, sans-serif;
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 20px;
+    background:#f5f5f5;
+}
+
+.container{
+    background:white;
+    padding:30px;
+    border-radius:12px;
+    box-shadow:0 2px 10px rgba(0,0,0,.1);
+}
+
+h1{
+    text-align:center;
+}
+
+.dropzone{
+    border:3px dashed #0077ff;
+    border-radius:10px;
+    padding:40px;
+    text-align:center;
+    background:#fafafa;
+    cursor:pointer;
+}
+
+.dropzone.dragover{
+    background:#e8f1ff;
+}
+
+#fileList{
+    margin-top:20px;
+}
+
+.file-item{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    background:#f1f1f1;
+    margin:8px 0;
+    padding:10px;
+    border-radius:8px;
+}
+
+.actions{
+    display:flex;
+    gap:5px;
+}
+
+button{
+    border:none;
+    padding:10px 15px;
+    border-radius:6px;
+    cursor:pointer;
+}
+
+.up,.down{
+    background:#ddd;
+}
+
+.remove{
+    background:#ff5252;
+    color:white;
+}
+
+.merge{
+    margin-top:20px;
+    width:100%;
+    background:#0077ff;
+    color:white;
+    font-size:16px;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Juntar PDFs</h1>
+
+    <div class="dropzone" id="dropzone">
+        Arraste PDFs aqui ou clique para selecionar
+    </div>
+
+    <input type="file" id="fileInput" multiple accept=".pdf" hidden>
+
+    <div id="fileList"></div>
+
+    <button class="merge" onclick="mergePDFs()">
+        Juntar PDFs
+    </button>
+</div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const fileList = document.getElementById('fileList');
+
+let filesArray = [];
+
+dropzone.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', (e) => {
+    addFiles([...e.target.files]);
+});
+
+dropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.classList.add('dragover');
+});
+
+dropzone.addEventListener('dragleave', () => {
+    dropzone.classList.remove('dragover');
+});
+
+dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    addFiles([...e.dataTransfer.files].filter(f => f.type === 'application/pdf'));
+});
+
+function addFiles(newFiles){
+    filesArray.push(...newFiles);
+    renderList();
+}
+
+function renderList(){
+    fileList.innerHTML = '';
+
+    filesArray.forEach((file,index)=>{
+
+        const div = document.createElement('div');
+        div.className = 'file-item';
+
+        div.innerHTML = `
+            <span>${index+1}. ${file.name}</span>
+
+            <div class="actions">
+                <button class="up">↑</button>
+                <button class="down">↓</button>
+                <button class="remove">Remover</button>
+            </div>
+        `;
+
+        div.querySelector('.up').onclick = ()=>{
+            if(index>0){
+                [filesArray[index],filesArray[index-1]] =
+                [filesArray[index-1],filesArray[index]];
+                renderList();
+            }
+        };
+
+        div.querySelector('.down').onclick = ()=>{
+            if(index<filesArray.length-1){
+                [filesArray[index],filesArray[index+1]] =
+                [filesArray[index+1],filesArray[index]];
+                renderList();
+            }
+        };
+
+        div.querySelector('.remove').onclick = ()=>{
+            filesArray.splice(index,1);
+            renderList();
+        };
+
+        fileList.appendChild(div);
+    });
+}
+
+async function mergePDFs(){
+
+    if(filesArray.length === 0){
+        alert('Selecione pelo menos um PDF.');
+        return;
+    }
+
+    const mergedPdf = await PDFLib.PDFDocument.create();
+
+    for(const file of filesArray){
+
+        const bytes = await file.arrayBuffer();
+
+        const pdf = await PDFLib.PDFDocument.load(bytes);
+
+        const pages = await mergedPdf.copyPages(
+            pdf,
+            pdf.getPageIndices()
+        );
+
+        pages.forEach(page => mergedPdf.addPage(page));
+    }
+
+    const mergedBytes = await mergedPdf.save();
+
+    const blob = new Blob(
+        [mergedBytes],
+        {type:'application/pdf'}
+    );
+
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'pdf-unificado.pdf';
+    a.click();
+
+    URL.revokeObjectURL(url);
+}
+</script>
+
+</body>
+</html>
